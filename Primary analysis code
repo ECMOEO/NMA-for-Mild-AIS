@@ -1,0 +1,74 @@
+1.Import data into Stata
+# Data Preprocessing
+network setup d n, studyvar(id) trtvar(trt) format(augment)  rr
+# network plot 
+network map
+
+2. Import data into R
+# League table
+eff <- data %>% mutate(d= as.numeric(d), n = as.numeric(n))
+deff <- pairwise(treat = trt,  
+                 n = n,
+                 event = d, 
+                 data = eff, 
+                 studlab = id,
+                 SM = "RR") 
+e.netmeta <- netmeta(deff,
+                     common = FALSE,
+                     random = TRUE,
+                     reference.group = "BMT")
+treatments <- e.netmeta$trts
+league_table <- netleague(e.netmeta,
+                          seq = treatments, 
+                          digits = 2, 
+                          bracket = "(", 
+                          backtransf = TRUE, 
+                          common = FALSE, 
+                          label.lower = "Favors BMT", 
+                          label.upper = "Favors treatment") 
+
+# Between-study heterogeneity test
+eff <- data %>% mutate(d= as.numeric(d), n = as.numeric(n))
+deff <- pairwise(treat = trt, 
+                 n = n, 
+                 event = d, 
+                 data = eff, 
+                 studlab = id,
+                 SM = "RR")
+e.netmeta <- netmeta(deff,
+                     common = FALSE,
+                     random = TRUE,
+                     reference.group = "BMT") 
+e.netmeta 
+direct <- netpairwise(e.netmeta)
+summary(direct)
+
+
+# Total heterogeneity (inconsistency) test
+eff <- data %>% mutate(d= as.numeric(d), n = as.numeric(n))
+deff <- pairwise(treat = trt, 
+                 n = n, 
+                 event = d, 
+                 data = eff, 
+                 studlab = id,
+                 SM = "RR")
+e.netmeta <- netmeta(deff,
+                     common = FALSE,
+                     random = TRUE,
+                     reference.group = "BMT") 
+decomp <- decomp.design(e.netmeta)
+print(decomp)
+
+# Local inconsistency test
+eff <- data %>% mutate(d= as.numeric(d), n = as.numeric(n))
+deff <- pairwise(treat = trt, 
+                 n = n, 
+                 event = d, 
+                 data = eff, 
+                 studlab = id,
+                 SM = "RR")
+e.netmeta <- netmeta(deff,
+                     common = FALSE,
+                     random = TRUE,
+                     reference.group = "BMT") 
+netsplit(e.netmeta, show="all", ci=TRUE)
