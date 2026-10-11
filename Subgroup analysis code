@@ -1,0 +1,129 @@
+==== Global Settings ===
+OUTCOME_NAME   <- "mRS 0-1"    
+LEVEL_NAME     <- "treatment class level"    
+SUBGROUP_VAR   <- "subgroup"      
+STUDY_ID_VAR   <- "study_id"     
+TREATMENT_VAR  <- "treatment"     
+EVENTS_VAR     <- "events"        
+TOTAL_VAR      <- "total"       
+REF_TREATMENT  <- "IVT"          
+COMPARISONS    <- c("BMT", "SAPT", "DAPT") 
+ANALYSIS_SUBGROUP <- "severity"
+
+==== Data analysis ====
+data_full <- read_xlsx("data.xlsx")
+
+d <- data_full %>%
+  filter(
+    analysis == ANALYSIS_SUBGROUP,
+    outcome  == OUTCOME_NAME,
+    level    == LEVEL_NAME,
+    criteria == SENSITIVITY
+  )
+
+d$subgroup <- relevel(
+  factor(d$subgroup),
+  ref = "Nondisabling"
+)
+
+pw <- d %>%
+  group_by(!!sym(STUDY_ID_VAR), !!sym(SUBGROUP_VAR)) %>%
+  filter(REF_TREATMENT %in% !!sym(TREATMENT_VAR)) %>%
+  group_map(~ {
+    ivt    <- .x %>% filter(!!sym(TREATMENT_VAR) == REF_TREATMENT)
+    others <- .x %>% filter(!!sym(TREATMENT_VAR) != REF_TREATMENT)
+    if (nrow(ivt) == 0 || nrow(others) == 0) return(tibble())
+    ivt <- ivt[1, ]
+    tibble(
+      studlab  = paste(.y[[STUDY_ID_VAR]], .y[[SUBGROUP_VAR]], sep = " | "),
+      treat    = others[[TREATMENT_VAR]],
+      event.e  = as.numeric(others[[EVENTS_VAR]]),
+      n.e      = as.numeric(others[[TOTAL_VAR]]),
+      event.c  = as.numeric(ivt[[EVENTS_VAR]]),
+      n.c      = as.numeric(ivt[[TOTAL_VAR]]),
+      subgroup = .y[[SUBGROUP_VAR]]
+    )
+  }) %>%
+  bind_rows()
+
+tmp <- pw %>% filter(treat == COMPARISONS[1])
+if (nrow(tmp) >= 2) {
+  m_COMPARISONS1 <- metabin(
+    event.e = event.e, n.e = n.e,
+    event.c = event.c, n.c = n.c,
+    studlab = studlab, data = tmp,
+    sm = "RR", method = "Inverse", method.tau = "DL",
+    common = FALSE, random = TRUE,
+    subgroup = subgroup, test.subgroup = TRUE,
+    prediction = TRUE, digits = 2, warn = FALSE
+  )}
+
+
+tmp <- pw %>% filter(treat == COMPARISONS[2])
+if (nrow(tmp) >= 2) {
+  m_COMPARISONS2 <- metabin(
+    event.e = event.e, n.e = n.e,
+    event.c = event.c, n.c = n.c,
+    studlab = studlab, data = tmp,
+    sm = "RR", method = "Inverse", method.tau = "DL",
+    common = FALSE, random = TRUE,
+    subgroup = subgroup, test.subgroup = TRUE,
+    prediction = TRUE, digits = 2, warn = FALSE
+  )}
+
+tmp <- pw %>% filter(treat == COMPARISONS[3])
+if (nrow(tmp) >= 2) {
+  m_COMPARISONS3 <- metabin(
+    event.e = event.e, n.e = n.e,
+    event.c = event.c, n.c = n.c,
+    studlab = studlab, data = tmp,
+    sm = "RR", method = "Inverse", method.tau = "DL",
+    common = FALSE, random = TRUE,
+    subgroup = subgroup, test.subgroup = TRUE,
+    prediction = TRUE, digits = 2, warn = FALSE
+  )}
+
+extract <- function(m, treatment) {
+  if (is.null(m)) return(tibble())
+  overall <- tibble(
+    Outcome    = OUTCOME_NAME,
+    Treatment  = treatment,
+    Subgroup   = "Overall",
+    Studies    = m$k,
+    RR         = round(exp(m$TE.random), 3),
+    Lower_95CI = round(exp(m$lower.random), 3),
+    Upper_95CI = round(exp(m$upper.random), 3),
+    P_value    = format.pval(m$pval.random, eps = 0.001),
+    I2         = paste0(round(m$I2, 1), "%"),
+    tau2       = round(m$tau2, 3),
+    Subgroup_P = ifelse(!is.null(m$pval.Q.b.random),
+                        format.pval(m$pval.Q.b.random, eps = 0.001), NA)
+  )
+  if (!is.null(m$TE.random.w)) {
+    sub <- tibble(
+      Outcome    = OUTCOME_NAME,
+      Treatment  = treatment,
+      Subgroup   = as.character(m$bylevs),
+      Studies    = as.integer(m$k.w),
+      RR         = round(exp(m$TE.random.w), 3),
+      Lower_95CI = round(exp(m$lower.random.w), 3),
+      Upper_95CI = round(exp(m$upper.random.w), 3),
+      P_value    = format.pval(as.vector(m$pval.random.w), eps = 0.001),
+      I2         = paste0(round(as.vector(m$I2.w), 1), "%"),
+      tau2       = round(as.vector(m$tau2.w), 3),
+      Subgroup_P = NA
+    )
+    bind_rows(overall, sub)
+  } else {
+    overall
+  }
+}
+
+summary_table <- bind_rows(
+  extract(m_COMPARISONS1,  COMPARISONS[1]),
+  extract(m_COMPARISONS2, COMPARISONS[2]),
+  extract(m_COMPARISONS3, COMPARISONS[3])
+)
+
+cat("\n=== Summary Table ===\n")
+print(summary_table, n = Inf)
